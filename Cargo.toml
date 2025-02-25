@@ -1,0 +1,15 @@
+[package]
+name = "csv_reader_app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+csv = "1.2"
+eframe = "0.22"
+rfd = "0.12"
+egui_extras = "0.22"
+
+[package.metadata.bundle]
+name = "CSVReader"
+identifier = "com.jpballares.csvreader"
+icon = ["assets/icon.icns"]

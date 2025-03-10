@@ -15,6 +15,20 @@ fn read_csv_with_header(file_path: &str) -> Result<(Vec<String>, Vec<Vec<String>
     Ok((header, records))
 }
 
+fn save_csv(
+    path: &str,
+    header: &Vec<String>,
+    data: &Vec<Vec<String>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut wtr = csv::Writer::from_path(path)?;
+    wtr.write_record(header)?;
+    for row in data {
+        wtr.write_record(row)?;
+    }
+    wtr.flush()?;
+    Ok(())
+}
+
 #[derive(Default)]
 struct MyApp {
     csv_header: Vec<String>,
@@ -59,24 +73,36 @@ impl MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            // Load CSV file
-            if ui.button("Load CSV").clicked() {
-                if let Some(path) = FileDialog::new().add_filter("CSV", &["csv"]).pick_file() {
-                    if let Some(path_str) = path.to_str() {
-                        if let Ok((header, data)) = read_csv_with_header(path_str) {
-                            self.csv_header = header;
-                            self.csv_data = data;
-                            self.current_page = 0;
-                            self.search_query.clear();
-                            self.search_results = None;
-                            self.row_number_input.clear();
-                            self.selected_row = None;
+            ui.horizontal(|ui| {
+                // Load CSV file
+                if ui.button("Load CSV").clicked() {
+                    if let Some(path) = FileDialog::new().add_filter("CSV", &["csv"]).pick_file() {
+                        if let Some(path_str) = path.to_str() {
+                            if let Ok((header, data)) = read_csv_with_header(path_str) {
+                                self.csv_header = header;
+                                self.csv_data = data;
+                                self.current_page = 0;
+                                self.search_query.clear();
+                                self.search_results = None;
+                                self.row_number_input.clear();
+                                self.selected_row = None;
+                            }
+                        } else {
+                            eprintln!("Selected file path is not valid UTF-8");
                         }
-                    } else {
-                        eprintln!("Selected file path is not valid UTF-8");
                     }
                 }
-            }
+                // Save CSV file
+                if ui.button("Save CSV").clicked() {
+                    if let Some(path) = FileDialog::new().save_file() {
+                        if let Some(path_str) = path.to_str() {
+                            if let Err(err) = save_csv(path_str, &self.csv_header, &self.csv_data) {
+                                eprintln!("Error saving CSV: {}", err);
+                            }
+                        }
+                    }
+                }
+            });
             ui.separator();
 
             // Search by text:
@@ -200,7 +226,8 @@ impl eframe::App for MyApp {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let options = eframe::NativeOptions::default();
+    let mut options = eframe::NativeOptions::default();
+    options.maximized = true;
     eframe::run_native(
         "CSV Reader",
         options,

@@ -137,6 +137,20 @@ impl eframe::App for MyApp {
                     }
                 }
             });
+
+            if self.search_results.is_none() && self.selected_row.is_none() {
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if ui.button("Previous").clicked() && self.current_page > 0 {
+                        self.current_page -= 1;
+                    }
+                    ui.label(format!("Page {} of {}", self.current_page + 1, self.total_pages()));
+                    if ui.button("Next").clicked() && self.current_page + 1 < self.total_pages() {
+                        self.current_page += 1;
+                    }
+                });
+            }
+
             ui.separator();
 
             let rows_to_display: Vec<Vec<String>> = if !self.csv_header.is_empty() {
@@ -168,7 +182,7 @@ impl eframe::App for MyApp {
                     TableBuilder::new(ui)
                         .striped(true)
                         .resizable(true)
-                        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+                        .cell_layout(egui::Layout::left_to_right(egui::Align::TOP))
                         .columns(Column::initial(150.0), num_columns)
                         .header(25.0, |mut header| {
                             for header_cell in &self.csv_header {
@@ -210,17 +224,6 @@ impl eframe::App for MyApp {
                 });
             }
 
-            if self.search_results.is_none() && self.selected_row.is_none() {
-                ui.horizontal(|ui| {
-                    if ui.button("Previous").clicked() && self.current_page > 0 {
-                        self.current_page -= 1;
-                    }
-                    ui.label(format!("Page {} of {}", self.current_page + 1, self.total_pages()));
-                    if ui.button("Next").clicked() && self.current_page + 1 < self.total_pages() {
-                        self.current_page += 1;
-                    }
-                });
-            }
         });
     }
 }

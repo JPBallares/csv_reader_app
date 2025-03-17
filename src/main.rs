@@ -36,6 +36,7 @@ struct MyApp {
     current_page: usize,
     rows_per_page: usize,
     search_query: String,
+    search_header: u8,
     search_results: Option<Vec<Vec<String>>>,
     row_number_input: String,
     selected_row: Option<Vec<String>>,
@@ -54,7 +55,11 @@ impl MyApp {
         let query = self.search_query.to_lowercase();
         self.csv_data
             .iter()
-            .filter(|row| row.iter().any(|cell| cell.to_lowercase().contains(&query)))
+            .filter(|row| {
+                row.iter()
+                    .enumerate()
+                    .any(|(idx, cell)| idx as u8 == self.search_header && cell.to_lowercase().contains(&query))
+            })
             .cloned()
             .collect()
     }
@@ -109,10 +114,19 @@ impl eframe::App for MyApp {
             ui.horizontal(|ui| {
                 ui.label("Search:");
                 ui.text_edit_singleline(&mut self.search_query);
+
+
+                ui.label("Column Index:");
+                let mut search_header = self.search_header.to_string();
+                ui.text_edit_singleline(&mut search_header);
+                self.search_header = match search_header.parse() { Ok(n) => n, Err(_) => 0};
+
                 if ui.button("Search").clicked() {
                     self.search_results = Some(self.perform_search());
                     self.selected_row = None;
                 }
+
+
                 if ui.button("Clear Search").clicked() {
                     self.search_query.clear();
                     self.search_results = None;

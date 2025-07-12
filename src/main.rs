@@ -161,6 +161,17 @@ impl eframe::App for MyApp {
                     if ui.button("Hide All").clicked() {
                         self.toggle_all_columns(false);
                     }
+                    if ui.button("Hide All Blank Columns").clicked() {
+                        let mut non_blank = vec![false; self.csv_header.len()];
+                        for row in &self.csv_data {
+                            for (i, cell) in row.iter().enumerate() {
+                                if !cell.trim().is_empty() {
+                                    non_blank[i] = true;
+                                }
+                            }
+                        }
+                        self.visible_columns = non_blank;
+                    }
                 });
 
                 ui.label("Column Visibility:");

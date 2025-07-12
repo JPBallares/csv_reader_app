@@ -40,6 +40,8 @@ struct MyApp {
     search_results: Option<Vec<Vec<String>>>,
     row_number_input: String,
     selected_row: Option<Vec<String>>,
+    visible_columns: Vec<bool>, // Track which columns are visible
+    show_column_controls: bool, // Toggle for showing/hiding column controls
 }
 
 impl MyApp {
@@ -73,6 +75,35 @@ impl MyApp {
             None
         }
     }
+
+    // Filter columns based on visibility
+    fn filter_visible_columns(&self, row: &Vec<String>) -> Vec<String> {
+        row.iter()
+            .enumerate()
+            .filter(|(idx, _)| *idx < self.visible_columns.len() && self.visible_columns[*idx])
+            .map(|(_, cell)| cell.clone())
+            .collect()
+    }
+
+    // Get visible headers
+    fn get_visible_headers(&self) -> Vec<String> {
+        self.filter_visible_columns(&self.csv_header)
+    }
+
+    // Initialize visible columns when CSV is loaded
+    fn initialize_visible_columns(&mut self) {
+        self.visible_columns = vec![true; self.csv_header.len()];
+    }
+
+    // Toggle all columns on/off
+    fn toggle_all_columns(&mut self, visible: bool) {
+        self.visible_columns = vec![visible; self.csv_header.len()];
+    }
+
+    // Count visible columns
+    fn visible_column_count(&self) -> usize {
+        self.visible_columns.iter().filter(|&&v| v).count()
+    }
 }
 
 impl eframe::App for MyApp {
@@ -91,6 +122,7 @@ impl eframe::App for MyApp {
                                 self.search_results = None;
                                 self.row_number_input.clear();
                                 self.selected_row = None;
+                                self.initialize_visible_columns();
                             }
                         } else {
                             eprintln!("Selected file path is not valid UTF-8");
@@ -107,14 +139,53 @@ impl eframe::App for MyApp {
                         }
                     }
                 }
+
+                // Column visibility controls
+                if !self.csv_header.is_empty() {
+                    ui.separator();
+                    if ui.button(if self.show_column_controls { "Hide Column Controls" } else { "Show Column Controls" }).clicked() {
+                        self.show_column_controls = !self.show_column_controls;
+                    }
+
+                    ui.label(format!("Visible: {}/{}", self.visible_column_count(), self.csv_header.len()));
+                }
             });
+
+            // Column visibility controls
+            if self.show_column_controls && !self.csv_header.is_empty() {
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if ui.button("Show All").clicked() {
+                        self.toggle_all_columns(true);
+                    }
+                    if ui.button("Hide All").clicked() {
+                        self.toggle_all_columns(false);
+                    }
+                });
+
+                ui.label("Column Visibility:");
+                ui.push_id("column_visibility_scroll", |ui| {
+                    egui::ScrollArea::horizontal().show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            for (idx, header) in self.csv_header.iter().enumerate() {
+                                if idx < self.visible_columns.len() {
+                                    ui.push_id(idx, |ui| {
+                                        ui.checkbox(&mut self.visible_columns[idx], header)
+                                            .on_hover_text(format!("Toggle visibility for column: {}", header));
+                                    });
+                                }
+                            }
+                        });
+                    });
+                });
+            }
+
             ui.separator();
 
             // Search by text:
             ui.horizontal(|ui| {
                 ui.label("Search:");
                 ui.text_edit_singleline(&mut self.search_query);
-
 
                 ui.label("Column Index:");
                 let mut search_header = self.search_header.to_string();
@@ -125,7 +196,6 @@ impl eframe::App for MyApp {
                     self.search_results = Some(self.perform_search());
                     self.selected_row = None;
                 }
-
 
                 if ui.button("Clear Search").clicked() {
                     self.search_query.clear();
@@ -189,55 +259,60 @@ impl eframe::App for MyApp {
                 vec![]
             };
 
-            if !rows_to_display.is_empty() {
+            if !rows_to_display.is_empty() && self.visible_column_count() > 0 {
                 egui::ScrollArea::both().show(ui, |ui| {
-                    let ctx = ui.ctx().clone(); // clone the context early
-                    let num_columns = self.csv_header.len();
-                    TableBuilder::new(ui)
-                        .striped(true)
-                        .resizable(true)
-                        .cell_layout(egui::Layout::left_to_right(egui::Align::TOP))
-                        .columns(Column::initial(150.0), num_columns)
-                        .header(25.0, |mut header| {
-                            for header_cell in &self.csv_header {
-                                header.col(|ui| {
-                                    ui.label(egui::RichText::new(header_cell).text());
-                                });
-                            }
-                        })
-                        .body(|mut body| {
-                            let rows = if rows_to_display.len() > 1 && rows_to_display[0] == self.csv_header {
-                                &rows_to_display[1..]
-                            } else {
-                                &rows_to_display[..]
-                            };
-                            for row in rows {
-                                // Assume each column starts with 150.0 width.
-                                let row_height = row.iter().fold(20.0f32, |mut max_height, cell| {
-                                    let available_width = 150.0;
-                                    let galley = ctx.fonts(|f| {
-                                        f.layout(
-                                            cell.clone(),
-                                            FontId::new(14.0, FontFamily::Proportional),
-                                            Color32::WHITE,
-                                            available_width,
-                                        )
-                                    });
-                                    max_height = max_height.max(galley.size().y as f32);
-                                    max_height
-                                });
-                                body.row(row_height, |mut row_ui| {
-                                    for cell in row {
-                                        row_ui.col(|ui| {
-                                            ui.add(egui::Label::new(cell).wrap(true));
-                                        });
-                                    }
-                                });
-                            }
-                        });
-                });
-            }
+                    let ctx = ui.ctx().clone();
+                    let visible_headers = self.get_visible_headers();
+                    let num_visible_columns = visible_headers.len();
 
+                    if num_visible_columns > 0 {
+                        TableBuilder::new(ui)
+                            .striped(true)
+                            .resizable(true)
+                            .cell_layout(egui::Layout::left_to_right(egui::Align::TOP))
+                            .columns(Column::initial(150.0), num_visible_columns)
+                            .header(25.0, |mut header| {
+                                for header_cell in &visible_headers {
+                                    header.col(|ui| {
+                                        ui.label(egui::RichText::new(header_cell).text());
+                                    });
+                                }
+                            })
+                            .body(|mut body| {
+                                let rows = if rows_to_display.len() > 1 && rows_to_display[0] == self.csv_header {
+                                    &rows_to_display[1..]
+                                } else {
+                                    &rows_to_display[..]
+                                };
+                                for row in rows {
+                                    let visible_row = self.filter_visible_columns(row);
+                                    let row_height = visible_row.iter().fold(20.0f32, |mut max_height, cell| {
+                                        let available_width = 150.0;
+                                        let galley = ctx.fonts(|f| {
+                                            f.layout(
+                                                cell.clone(),
+                                                FontId::new(14.0, FontFamily::Proportional),
+                                                Color32::WHITE,
+                                                available_width,
+                                            )
+                                        });
+                                        max_height = max_height.max(galley.size().y as f32);
+                                        max_height
+                                    });
+                                    body.row(row_height, |mut row_ui| {
+                                        for cell in &visible_row {
+                                            row_ui.col(|ui| {
+                                                ui.add(egui::Label::new(cell).wrap(true));
+                                            });
+                                        }
+                                    });
+                                }
+                            });
+                    }
+                });
+            } else if !rows_to_display.is_empty() && self.visible_column_count() == 0 {
+                ui.label("No columns are visible. Use the column controls to show columns.");
+            }
         });
     }
 }
@@ -250,6 +325,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         options,
         Box::new(|_cc| Box::new(MyApp {
             rows_per_page: 100,
+            show_column_controls: false,
             ..Default::default()
         })),
     )?;
